@@ -8,7 +8,6 @@ import { momentumSignal } from "./strategy/momentum.mjs";
 import { executeJupiterSwap } from "./jupiter.mjs";
 import { resolveWallet } from "../cli/lib/wallet/resolve.js";
 import { getAgentToken } from "../cli/lib/wallet/keystore.js";
-import * as api from "../cli/lib/api/client.js";
 
 const TRADE_AMOUNT_SOL_LAMPORTS  = 20_000_000;  // 0.02 SOL (above $1 min, leaves gas)
 const TRADE_AMOUNT_USDC_LAMPORTS = 1_000_000;   // 1 USDC (6 decimals)
@@ -32,16 +31,17 @@ async function getSolPrice() {
     return _cachedPrice;
   }
   try {
-    const res = await api.searchFungibles("SOL", { chain: "solana" });
-    const sol = (res.data || []).find(
-      (f) => f.attributes?.symbol?.toUpperCase() === "SOL"
+    const res = await fetch(
+      "https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT",
+      { signal: AbortSignal.timeout(10_000) }
     );
-    const price = sol?.attributes?.market_data?.price ?? null;
-    if (typeof price === "number") {
-      _cachedPrice = price;
-      _cachePriceTs = Date.now();
-    }
-    return price;
+    if (!res.ok) throw new Error(`Binance ${res.status}`);
+    const { price } = await res.json();
+    const num = parseFloat(price);
+    if (isNaN(num)) throw new Error("non-numeric price");
+    _cachedPrice = num;
+    _cachePriceTs = Date.now();
+    return num;
   } catch (err) {
     throw new Error(`Price fetch failed: ${err.message}`);
   }
