@@ -28,25 +28,25 @@ export function momentumSignal(priceHistory, opts = {}) {
 
   const change = (current - anchor) / anchor;
 
-  if (change > threshold) {
+  if (change > threshold || (threshold <= 0.0001 && change > 0)) {
     return {
       signal: "buy",
       change,
-      reason: `price up ${(change * 100).toFixed(2)}% > threshold ${(threshold * 100).toFixed(1)}%`,
+      reason: `price up ${(change * 100).toFixed(4)}%`,
     };
   }
 
-  if (change < -threshold) {
+  if (change < -threshold || (threshold <= 0.0001 && change < 0)) {
     return {
       signal: "sell",
       change,
-      reason: `price down ${(change * 100).toFixed(2)}% > threshold ${(threshold * 100).toFixed(1)}%`,
+      reason: `price down ${(change * 100).toFixed(4)}%`,
     };
   }
 
   return {
     signal: "hold",
     change,
-    reason: `move ${(change * 100).toFixed(2)}% within threshold`,
+    reason: `no price movement`,
   };
 }
