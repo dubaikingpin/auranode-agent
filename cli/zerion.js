@@ -5,6 +5,27 @@
  * Routes argv to command handlers via the router.
  */
 
+// Auto-load .env from the repo root so the CLI works without --env-file.
+import { readFileSync as _readFileSync } from "node:fs";
+import { resolve as _resolve, dirname as _dirname } from "node:path";
+import { fileURLToPath as _fileURLToPath } from "node:url";
+{
+  const _dir = _dirname(_fileURLToPath(import.meta.url));
+  const _envPath = _resolve(_dir, "../.env");
+  try {
+    const _lines = _readFileSync(_envPath, "utf-8").split("\n");
+    for (const _line of _lines) {
+      const _t = _line.trim();
+      if (!_t || _t.startsWith("#")) continue;
+      const _eq = _t.indexOf("=");
+      if (_eq === -1) continue;
+      const _k = _t.slice(0, _eq).trim();
+      const _v = _t.slice(_eq + 1).trim();
+      if (_k && !(_k in process.env)) process.env[_k] = _v;
+    }
+  } catch { /* no .env — rely on shell env */ }
+}
+
 import { register, registerSingle, dispatch } from "./router.js";
 import { printError, setPrettyMode } from "./lib/util/output.js";
 import { migrateFromZerionCli } from "./lib/util/migrate.js";
