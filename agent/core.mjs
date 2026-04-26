@@ -11,13 +11,16 @@ import { getAgentToken } from "../cli/lib/wallet/keystore.js";
 import * as api from "../cli/lib/api/client.js";
 
 const TRADE_AMOUNT_SOL = "0.01";   // 0.01 SOL per sell (leaves gas buffer)
-const TRADE_AMOUNT_USDC = "1";     // $1 USDC per buy (matches wallet balance)
-const TICK_MS = 30_000;            // 30s between ticks
+const TRADE_AMOUNT_USDC = "2";     // $2 USDC per buy
+const TICK_MS = 60_000;            // 60s between ticks — stay within free tier
 const MAX_PRICE_HISTORY = 20;
+const PRICE_CACHE_MS = 25_000;     // reuse last price if < 25s old
 
 let priceHistory = [];
 let running = false;
 let tickTimer = null;
+let _cachedPrice = null;
+let _cachePriceTs = 0;
 
 function log(msg) {
   const ts = new Date().toISOString();
@@ -25,13 +28,20 @@ function log(msg) {
 }
 
 async function getSolPrice() {
+  if (_cachedPrice !== null && Date.now() - _cachePriceTs < PRICE_CACHE_MS) {
+    return _cachedPrice;
+  }
   try {
     const res = await api.searchFungibles("SOL", { chain: "solana" });
     const sol = (res.data || []).find(
       (f) => f.attributes?.symbol?.toUpperCase() === "SOL"
     );
     const price = sol?.attributes?.market_data?.price ?? null;
-    return typeof price === "number" ? price : null;
+    if (typeof price === "number") {
+      _cachedPrice = price;
+      _cachePriceTs = Date.now();
+    }
+    return price;
   } catch (err) {
     throw new Error(`Price fetch failed: ${err.message}`);
   }

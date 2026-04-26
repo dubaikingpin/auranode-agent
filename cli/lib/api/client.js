@@ -10,7 +10,11 @@ import { basicAuthHeader, resolveApiKeyAuth } from "./auth.js";
 import { getX402Fetch } from "./x402.js";
 import { getMppFetch } from "./mpp.js";
 
-export async function fetchAPI(pathname, params = {}, auth) {
+async function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+export async function fetchAPI(pathname, params = {}, auth, { maxRetries = 3 } = {}) {
   const resolved = auth || resolveApiKeyAuth();
 
   const url = new URL(`${API_BASE}${pathname}`);
@@ -36,30 +40,42 @@ export async function fetchAPI(pathname, params = {}, auth) {
       throw new Error(`fetchAPI: unknown auth kind: ${resolved.kind}`);
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30_000);
-  const response = await fetchFn(url, { headers, signal: controller.signal });
-  clearTimeout(timer);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
+    const response = await fetchFn(url, { headers, signal: controller.signal });
+    clearTimeout(timer);
 
-  const text = await response.text();
-  let payload;
-  try {
-    payload = text ? JSON.parse(text) : null;
-  } catch {
-    payload = { _rawText: text.slice(0, 500) };
+    if (response.status === 429 && attempt < maxRetries) {
+      const retryAfter = response.headers.get("retry-after");
+      const delayMs = retryAfter
+        ? parseInt(retryAfter, 10) * 1000
+        : 2000 * Math.pow(2, attempt);
+      process.stderr.write(`[zerion] 429 rate limited — retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})\n`);
+      await sleep(delayMs);
+      continue;
+    }
+
+    const text = await response.text();
+    let payload;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      payload = { _rawText: text.slice(0, 500) };
+    }
+
+    if (!response.ok) {
+      const err = new Error(
+        `Zerion API error: ${response.status} ${response.statusText}`
+      );
+      err.code = "api_error";
+      err.status = response.status;
+      err.response = payload;
+      throw err;
+    }
+
+    return payload;
   }
-
-  if (!response.ok) {
-    const err = new Error(
-      `Zerion API error: ${response.status} ${response.statusText}`
-    );
-    err.code = "api_error";
-    err.status = response.status;
-    err.response = payload;
-    throw err;
-  }
-
-  return payload;
 }
 
 // --- Wallet endpoints ---
