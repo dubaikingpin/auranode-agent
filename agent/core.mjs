@@ -5,15 +5,13 @@
 
 import { loadState, saveState, recordTrade, recordError } from "./state.mjs";
 import { momentumSignal } from "./strategy/momentum.mjs";
-import { getSwapQuote, executeSwap } from "../cli/lib/trading/swap.js";
+import { executeJupiterSwap } from "./jupiter.mjs";
 import { resolveWallet } from "../cli/lib/wallet/resolve.js";
 import { getAgentToken } from "../cli/lib/wallet/keystore.js";
 import * as api from "../cli/lib/api/client.js";
 
-const TRADE_AMOUNT_SOL = "0.02";   // 0.02 SOL per sell (~$1.73, above $1 min swap)
-const TRADE_AMOUNT_USDC = "1";     // $1 USDC per buy (matches wallet balance)
-// Solana USDC mint address — bypasses NATIVE_ALIASES which maps "USDC" to Ethereum address
-const SOLANA_USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const TRADE_AMOUNT_SOL_LAMPORTS  = 20_000_000;  // 0.02 SOL (above $1 min, leaves gas)
+const TRADE_AMOUNT_USDC_LAMPORTS = 1_000_000;   // 1 USDC (6 decimals)
 const TICK_MS = 60_000;            // 60s between ticks — stay within free tier
 const MAX_PRICE_HISTORY = 20;
 const PRICE_CACHE_MS = 25_000;     // reuse last price if < 25s old
@@ -49,27 +47,12 @@ async function getSolPrice() {
   }
 }
 
-async function executeTrade(action, walletName, walletAddress, passphrase) {
-  const isSOL = action === "buy";
-  const fromToken = isSOL ? SOLANA_USDC : "SOL";
-  const toToken = isSOL ? "SOL" : SOLANA_USDC;
-  const amount = isSOL ? TRADE_AMOUNT_USDC : TRADE_AMOUNT_SOL;
+async function executeTrade(action, walletName, passphrase) {
+  const amountLamports = action === "buy"
+    ? TRADE_AMOUNT_USDC_LAMPORTS
+    : TRADE_AMOUNT_SOL_LAMPORTS;
 
-  const quote = await getSwapQuote({
-    fromToken,
-    toToken,
-    amount,
-    fromChain: "solana",
-    toChain: "solana",
-    walletAddress,
-  });
-
-  if (quote.preconditions.enough_balance === false) {
-    throw new Error(`Insufficient ${fromToken} balance`);
-  }
-
-  const result = await executeSwap(quote, walletName, passphrase);
-  return { quote, result };
+  return executeJupiterSwap({ action, walletName, passphrase, amountLamports });
 }
 
 async function tick(config) {
@@ -110,20 +93,21 @@ async function tick(config) {
     return;
   }
 
-  const { walletName, address: walletAddress } = resolveWallet({});
+  const { walletName } = resolveWallet({});
 
   try {
-    log(`Executing ${signal}: ${signal === "buy" ? `${TRADE_AMOUNT_USDC} USDC → SOL` : `${TRADE_AMOUNT_SOL} SOL → USDC`}`);
-    const { quote, result } = await executeTrade(signal, walletName, walletAddress, passphrase);
+    const desc = signal === "buy" ? "0.02 SOL → USDC" : "1 USDC → SOL";
+    log(`Executing ${signal} via Jupiter: ${desc}`);
+    const result = await executeTrade(signal, walletName, passphrase);
 
     const trade = recordTrade(state, {
       action: signal,
       fromToken: signal === "buy" ? "USDC" : "SOL",
       toToken: signal === "buy" ? "SOL" : "USDC",
-      amount: signal === "buy" ? TRADE_AMOUNT_USDC : TRADE_AMOUNT_SOL,
+      amount: signal === "buy" ? "1 USDC" : "0.02 SOL",
       price,
       txHash: result.hash,
-      status: result.status === "success" ? "success" : "failed",
+      status: "success",
     });
 
     log(`Trade executed: ${result.hash} (${result.status})`);
