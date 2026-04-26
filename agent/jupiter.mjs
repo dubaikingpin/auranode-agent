@@ -3,7 +3,7 @@
  * Uses Jupiter v6 quote API (free, no key) + OWS for signing.
  */
 
-import { Connection, VersionedTransaction, sendAndConfirmRawTransaction } from "@solana/web3.js";
+import { Connection, VersionedTransaction } from "@solana/web3.js";
 import { getSolanaRpcUrl } from "../cli/lib/chain/registry.js";
 import * as ows from "../cli/lib/wallet/keystore.js";
 
@@ -87,18 +87,24 @@ export async function executeJupiterSwap({ action, walletName, passphrase, amoun
   // 2. Serialized tx
   const swapTxBase64 = await getJupiterSwapTx(quote, solAddress);
 
-  // 3. Sign via OWS
-  const swapTxHex = Buffer.from(swapTxBase64, "base64").toString("hex");
-  const signResult = ows.signSolanaTransaction(walletName, swapTxHex, passphrase);
-  const signedBytes = Buffer.from(signResult.signature, "hex");
+  // 3. Deserialize VersionedTransaction — sign message bytes only, then inject signature.
+  // OWS returns a raw 64-byte Ed25519 signature, not a reassembled transaction.
+  const swapTxBytes = Buffer.from(swapTxBase64, "base64");
+  const tx = VersionedTransaction.deserialize(swapTxBytes);
+  const messageBytes = tx.message.serialize();
+  const signResult = ows.signSolanaTransaction(walletName, Buffer.from(messageBytes).toString("hex"), passphrase);
+  const sig = Buffer.from(signResult.signature, "hex");
+  if (sig.length !== 64) throw new Error(`Expected 64-byte signature, got ${sig.length}`);
+  tx.signatures[0] = sig;
+  const signedBytes = Buffer.from(tx.serialize());
 
   // 4. Broadcast
   const connection = getConnection();
-  const txHash = await sendAndConfirmRawTransaction(connection, signedBytes, {
+  const txHash = await connection.sendRawTransaction(signedBytes, {
     skipPreflight: true,
-    commitment: "confirmed",
     maxRetries: 3,
   });
+  await connection.confirmTransaction(txHash, "confirmed");
 
   return {
     hash: txHash,
