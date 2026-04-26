@@ -12,7 +12,7 @@ import * as api from "../cli/lib/api/client.js";
 
 const TRADE_AMOUNT_SOL = "0.05";   // 0.05 SOL per buy (well within 0.1 limit)
 const TRADE_AMOUNT_USDC = "5";     // $5 USDC per sell
-const TICK_MS = 60_000;            // 1 minute between ticks
+const TICK_MS = 30_000;            // 30s between ticks
 const MAX_PRICE_HISTORY = 20;
 
 let priceHistory = [];
