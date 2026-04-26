@@ -34,8 +34,8 @@ function flag(name, defaultVal) {
 }
 
 const config = {
-  threshold: parseFloat(flag("threshold", "0.015")),
-  tickMs: parseInt(flag("tick", "60"), 10) * 1000,
+  threshold: parseFloat(flag("threshold", "0.001")),
+  tickMs: parseInt(flag("tick", "30"), 10) * 1000,
 };
 
 process.on("SIGINT", () => {
