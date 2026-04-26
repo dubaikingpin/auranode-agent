@@ -87,16 +87,15 @@ export async function executeJupiterSwap({ action, walletName, passphrase, amoun
   // 2. Serialized tx
   const swapTxBase64 = await getJupiterSwapTx(quote, solAddress);
 
-  // 3. Deserialize VersionedTransaction — sign message bytes only, then inject signature.
-  // OWS returns a raw 64-byte Ed25519 signature, not a reassembled transaction.
+  // 3. Sign: pass full tx bytes to OWS, inject returned 64-byte sig into VersionedTransaction.
   const swapTxBytes = Buffer.from(swapTxBase64, "base64");
-  const tx = VersionedTransaction.deserialize(swapTxBytes);
-  const messageBytes = tx.message.serialize();
-  const signResult = ows.signSolanaTransaction(walletName, Buffer.from(messageBytes).toString("hex"), passphrase);
+  const signResult = ows.signSolanaTransaction(walletName, swapTxBytes.toString("hex"), passphrase);
   const sig = Buffer.from(signResult.signature, "hex");
+
+  const tx = VersionedTransaction.deserialize(swapTxBytes);
   if (sig.length !== 64) throw new Error(`Expected 64-byte signature, got ${sig.length}`);
-  tx.signatures[0] = sig;
-  const signedBytes = Buffer.from(tx.serialize());
+  tx.signatures[0] = new Uint8Array(sig);
+  const signedBytes = tx.serialize();
 
   // 4. Broadcast
   const connection = getConnection();
