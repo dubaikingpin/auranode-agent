@@ -10,8 +10,8 @@ import { resolveWallet } from "../cli/lib/wallet/resolve.js";
 import { getAgentToken } from "../cli/lib/wallet/keystore.js";
 import * as api from "../cli/lib/api/client.js";
 
-const TRADE_AMOUNT_SOL = "0.01";   // 0.01 SOL per sell (leaves gas buffer)
-const TRADE_AMOUNT_USDC = "2";     // $2 USDC per buy
+const TRADE_AMOUNT_SOL = "0.02";   // 0.02 SOL per sell (~$1.73, above $1 min swap)
+const TRADE_AMOUNT_USDC = "1";     // $1 USDC per buy (matches wallet balance)
 const TICK_MS = 60_000;            // 60s between ticks — stay within free tier
 const MAX_PRICE_HISTORY = 20;
 const PRICE_CACHE_MS = 25_000;     // reuse last price if < 25s old
