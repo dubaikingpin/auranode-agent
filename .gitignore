@@ -4,3 +4,7 @@ node_modules/
 .DS_Store
 .idea/
 *.bak
+.env.save
+.env.save
+.env
+*.env*
